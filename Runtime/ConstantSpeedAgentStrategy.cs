@@ -44,7 +44,13 @@ namespace YanickSenn.Navigation
 
         public override void Update(float deltaTime)
         {
-            if (!hasPath || path == null || currentPathIndex >= path.Length) 
+            if (Mathf.Abs(Vector3.Dot(agent.transform.forward, Vector3.up)) < 0.99f)
+            {
+                Quaternion targetUpRotation = Quaternion.LookRotation(agent.transform.forward, Vector3.up);
+                agent.transform.rotation = Quaternion.Slerp(agent.transform.rotation, targetUpRotation, definition.upAlignmentSpeed * deltaTime);
+            }
+
+            if (!hasPath || path == null || currentPathIndex >= path.Length)
             {
                 hasPath = false;
                 return;
@@ -59,13 +65,19 @@ namespace YanickSenn.Navigation
                 Vector3 direction = targetPosition - currentPosition;
                 float distance = direction.magnitude;
 
+                if (distance > 0.0001f)
+                {
+                    Quaternion targetRotation = Quaternion.LookRotation(direction.normalized, agent.transform.up);
+                    agent.transform.rotation = Quaternion.Slerp(agent.transform.rotation, targetRotation, definition.forwardAlignmentSpeed * deltaTime);
+                }
+
                 if (remainingDistance >= distance)
                 {
                     // Snaps to the waypoint and carries remaining speed to the next waypoint
                     agent.transform.position = targetPosition;
                     remainingDistance -= distance;
                     currentPathIndex++;
-                    
+
                     if (currentPathIndex >= path.Length)
                     {
                         hasPath = false;
