@@ -4,7 +4,9 @@
     "references": [
         "YanickSenn.Navigation",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "PrimeTween.Runtime",
+        "YanickSenn.Utils"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

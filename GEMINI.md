@@ -86,3 +86,6 @@ To add new movement behaviors (e.g., Physics-based movement, acceleration/decele
 1. Create a new class inheriting from `NavAgentDefinition` (ScriptableObject). Add any necessary serialized configuration fields.
 2. Create a new class inheriting from `NavAgentStrategy`. Implement `Update(float deltaTime)`, `SetDestination`, and `Stop`. Use `NavMeshPathfinder.TryFindPath` to get the route.
 3. Override `CreateStrategy` in your definition to return your new strategy.
+
+## 🎬 Tweening
+For any kind of tweening (e.g., animations, UI transitions, or procedural movement), use **PrimeTween**. Do not use Coroutines or other tweening libraries unless explicitly requested.

@@ -1,7 +1,10 @@
 {
     "name": "YanickSenn.Navigation",
     "rootNamespace": "YanickSenn.Navigation",
-    "references": [],
+    "references": [
+        "GUID:80ecb87cae9c44d19824e70ea7229748",
+        "GUID:125d0d0d7d24f4ff2afd6807d1a1951c"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
