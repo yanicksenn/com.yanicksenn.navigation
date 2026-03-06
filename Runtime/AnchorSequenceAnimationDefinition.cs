@@ -79,33 +79,5 @@ namespace YanickSenn.Navigation
             return true;
         }
 
-        private void OnDrawGizmosSelected()
-        {
-            if (anchors == null || anchors.Length == 0) return;
-
-            Vector3 currentPos = Vector3.zero;
-
-            Gizmos.color = Color.cyan;
-
-            for (int i = 0; i < anchors.Length; i++)
-            {
-                Vector3 nextPos = anchors[i].localPosition;
-                Vector3 nextForward = anchors[i].localForward;
-                
-                Gizmos.DrawLine(currentPos, nextPos);
-                
-                if (nextForward.sqrMagnitude > 0.001f)
-                {
-                    Gizmos.color = Color.blue;
-                    Gizmos.DrawRay(nextPos, nextForward.normalized * 0.2f);
-                    Gizmos.color = Color.cyan;
-                }
-
-                currentPos = nextPos;
-            }
-            
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawSphere(currentPos, 0.05f);
-        }
     }
 }

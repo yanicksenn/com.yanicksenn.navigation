@@ -2,7 +2,9 @@
     "name": "YanickSenn.Navigation.Editor",
     "rootNamespace": "YanickSenn.Navigation.Editor",
     "references": [
-        "YanickSenn.Navigation"
+        "YanickSenn.Navigation",
+        "Unity.Splines",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [
         "Editor"

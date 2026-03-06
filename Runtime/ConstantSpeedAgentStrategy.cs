@@ -24,6 +24,11 @@ namespace YanickSenn.Navigation
             startPosition = agent.transform.position;
             if (NavMeshPathfinder.TryFindPath(agent.navMeshData, startPosition, target, out path, out pathCubes))
             {
+                if (definition.pathSmoothingFactor > 0f && definition.pathSmoothingIterations > 0 && path.Length > 2)
+                {
+                    path = SmoothPath(path, definition.pathSmoothingFactor, definition.pathSmoothingIterations);
+                }
+
                 currentPathIndex = 0;
                 hasPath = true;
             }
@@ -97,6 +102,56 @@ namespace YanickSenn.Navigation
         public override Vector3[] CurrentPath => hasPath ? path : new Vector3[0];
 
         public override Bounds[] CurrentPathCubes => hasPath ? pathCubes : new Bounds[0];
+
+        private Vector3[] SmoothPath(Vector3[] originalPath, float factor, int iterations)
+        {
+            var currentPath = new System.Collections.Generic.List<Vector3>(originalPath);
+
+            for (int i = 0; i < iterations; i++)
+            {
+                if (currentPath.Count < 3)
+                    break;
+
+                var nextPath = new System.Collections.Generic.List<Vector3>();
+
+                // Keep the first point
+                nextPath.Add(currentPath[0]);
+
+                for (int j = 0; j < currentPath.Count - 1; j++)
+                {
+                    Vector3 p0 = currentPath[j];
+                    Vector3 p1 = currentPath[j + 1];
+
+                    // Don't cut the corners at the very start and end if we only have 2 segments left overall,
+                    // but in Chaikin's open curves, we usually take the points at "factor" and "1-factor"
+                    // along each segment, except we keep the exact start and end points.
+
+                    if (j == 0)
+                    {
+                        // First segment: keeps p0 (already added), adds point near p1
+                        nextPath.Add(Vector3.Lerp(p0, p1, 1f - factor));
+                    }
+                    else if (j == currentPath.Count - 2)
+                    {
+                        // Last segment: adds point near p0, keeps p1 (added after loop)
+                        nextPath.Add(Vector3.Lerp(p0, p1, factor));
+                    }
+                    else
+                    {
+                        // Middle segments: adds two points, one near p0, one near p1
+                        nextPath.Add(Vector3.Lerp(p0, p1, factor));
+                        nextPath.Add(Vector3.Lerp(p0, p1, 1f - factor));
+                    }
+                }
+
+                // Keep the last point
+                nextPath.Add(currentPath[currentPath.Count - 1]);
+
+                currentPath = nextPath;
+            }
+
+            return currentPath.ToArray();
+        }
 
         public override void DrawGizmos()
         {

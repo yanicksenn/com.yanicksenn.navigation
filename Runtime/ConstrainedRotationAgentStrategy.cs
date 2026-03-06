@@ -101,7 +101,21 @@ namespace YanickSenn.Navigation {
             }
 
             // 2. Determine Lookahead Target (Carrot on a stick)
-            Vector3 lookaheadTarget = GetLookaheadTarget(currentPos);
+            // First we need to estimate the speed to get a good lookahead distance, then we refine the speed.
+            // A simple approximation: if the next waypoint is very sharp, assume we need a shorter lookahead.
+            Vector3 tempDesiredDirection = (path[currentPathIndex] - currentPos).normalized;
+            if (tempDesiredDirection == Vector3.zero) tempDesiredDirection = forward;
+            float tempAlpha = Vector3.Angle(forward, tempDesiredDirection);
+            
+            float tempSpeed = definition.speed;
+            if (tempAlpha > definition.slowDownAngleThreshold) {
+                float excessAngle = tempAlpha - definition.slowDownAngleThreshold;
+                float maxExcess = 180f - definition.slowDownAngleThreshold;
+                float tSpeed = Mathf.Clamp01(excessAngle / maxExcess);
+                tempSpeed = Mathf.Lerp(definition.speed, definition.minSpeed, tSpeed);
+            }
+            
+            Vector3 lookaheadTarget = GetLookaheadTarget(currentPos, tempSpeed);
 
             // 3. Determine initial steering intent
             Vector3 toTarget = lookaheadTarget - currentPos;
@@ -112,6 +126,17 @@ namespace YanickSenn.Navigation {
             Quaternion currentRotation = agent.transform.rotation;
 
             float alpha = Vector3.Angle(forward, desiredDirection);
+            
+            // Calculate dynamic speed based on turn severity
+            float currentSpeed = definition.speed;
+            if (alpha > definition.slowDownAngleThreshold) {
+                // Determine how far into the slowdown zone we are
+                float excessAngle = alpha - definition.slowDownAngleThreshold;
+                float maxExcess = 180f - definition.slowDownAngleThreshold;
+                float tSpeed = Mathf.Clamp01(excessAngle / maxExcess);
+                currentSpeed = Mathf.Lerp(definition.speed, definition.minSpeed, tSpeed);
+            }
+
             float angularSpeed = 0f;
             Vector3 rotationAxis = Vector3.up;
 
@@ -123,7 +148,7 @@ namespace YanickSenn.Navigation {
                 // Pure pursuit calculates a circular arc.
                 // Curvature kappa = 2 * sin(alpha) / L
                 // Angular speed omega = kappa * speed
-                float omegaRad = (2f * definition.speed * Mathf.Sin(alpha * Mathf.Deg2Rad)) / distToLookahead;
+                float omegaRad = (2f * currentSpeed * Mathf.Sin(alpha * Mathf.Deg2Rad)) / distToLookahead;
                 float omegaDeg = omegaRad * Mathf.Rad2Deg;
 
                 angularSpeed = Mathf.Min(omegaDeg, definition.maxRotationSpeed);
@@ -138,7 +163,7 @@ namespace YanickSenn.Navigation {
             }
 
             // 4. Project movement to check corridor bounds
-            int safeStepsForDesired = GetSafeSteps(currentPos, currentRotation, rotationAxis, angularSpeed);
+            int safeStepsForDesired = GetSafeSteps(currentPos, currentRotation, rotationAxis, angularSpeed, currentSpeed);
 
             if (angularSpeed > 0.1f && safeStepsForDesired < definition.projectionSteps) {
                 // Arc is not completely safe.
@@ -151,7 +176,7 @@ namespace YanickSenn.Navigation {
                 int numRadii = 2;
 
                 // Add the zero-rotation option explicitly (going straight)
-                int straightSafeSteps = GetSafeSteps(currentPos, currentRotation, Vector3.up, 0f);
+                int straightSafeSteps = GetSafeSteps(currentPos, currentRotation, Vector3.up, 0f, currentSpeed);
                 if (straightSafeSteps > bestSafeSteps) {
                     bestSafeSteps = straightSafeSteps;
                     bestTargetRot = currentRotation;
@@ -160,16 +185,16 @@ namespace YanickSenn.Navigation {
 
                 for (int r = 1; r <= numRadii; r++) {
                     float speedFraction = (float)r / numRadii;
-                    float testSpeed = definition.maxRotationSpeed * speedFraction;
+                    float testAngularSpeed = definition.maxRotationSpeed * speedFraction;
 
                     for (int i = 0; i < numConeAngles; i++) {
                         float angle = (i * 360f) / numConeAngles;
                         Vector3 testAxis = Quaternion.AngleAxis(angle, forward) * agent.transform.right;
 
                         Quaternion testTargetRot =
-                            Quaternion.AngleAxis(testSpeed * deltaTime, testAxis) * currentRotation;
+                            Quaternion.AngleAxis(testAngularSpeed * deltaTime, testAxis) * currentRotation;
 
-                        int safeSteps = GetSafeSteps(currentPos, currentRotation, testAxis, testSpeed);
+                        int safeSteps = GetSafeSteps(currentPos, currentRotation, testAxis, testAngularSpeed, currentSpeed);
 
                         if (safeSteps > bestSafeSteps) {
                             bestSafeSteps = safeSteps;
@@ -206,9 +231,9 @@ namespace YanickSenn.Navigation {
 
             // Re-run for final projected arc visualization
             if (angularSpeed > 0.001f) {
-                GetSafeSteps(currentPos, currentRotation, rotationAxis, angularSpeed);
+                GetSafeSteps(currentPos, currentRotation, rotationAxis, angularSpeed, currentSpeed);
             } else {
-                GetSafeSteps(currentPos, currentRotation, Vector3.up, 0f);
+                GetSafeSteps(currentPos, currentRotation, Vector3.up, 0f, currentSpeed);
             }
 
             currentSteeringTarget = lookaheadTarget;
@@ -216,15 +241,17 @@ namespace YanickSenn.Navigation {
             // Apply rotation
             agent.transform.rotation = targetRot;
 
-            // Apply constant forward translation
-            agent.transform.position += agent.transform.forward * (definition.speed * deltaTime);
+            // Apply forward translation using the current dynamic speed
+            agent.transform.position += agent.transform.forward * (currentSpeed * deltaTime);
         }
 
-        private Vector3 GetLookaheadTarget(Vector3 currentPos) {
+        private Vector3 GetLookaheadTarget(Vector3 currentPos, float speed) {
             // Minimum turning radius prevents the agent from orbiting a point it cannot physically turn tightly enough to reach.
-            float minRadius = definition.speed / (definition.maxRotationSpeed * Mathf.Deg2Rad);
-            // Ensure lookahead is always safely larger than the turning radius
-            float L = Mathf.Max(definition.lookaheadDistance, minRadius * 1.2f);
+            // When going slower, the min radius gets smaller allowing tighter turns.
+            float minRadius = speed / (definition.maxRotationSpeed * Mathf.Deg2Rad);
+            // Ensure lookahead is always safely larger than the turning radius, scaled by speed ratio
+            float speedRatio = speed / definition.speed;
+            float L = Mathf.Max(definition.lookaheadDistance * speedRatio, minRadius * 1.2f);
 
             Vector3 previousPosition = currentPathIndex > 0 ? path[currentPathIndex - 1] : startPosition;
             Vector3 targetPosition = path[currentPathIndex];
@@ -271,7 +298,7 @@ namespace YanickSenn.Navigation {
             return a + t * ab;
         }
 
-        private int GetSafeSteps(Vector3 startPos, Quaternion startRot, Vector3 rotationAxis, float angularSpeed) {
+        private int GetSafeSteps(Vector3 startPos, Quaternion startRot, Vector3 rotationAxis, float angularSpeed, float traversalSpeed) {
             projectedArc[0] = startPos;
             Vector3 simPos = startPos;
             Quaternion simRot = startRot;
@@ -283,7 +310,7 @@ namespace YanickSenn.Navigation {
                     simRot = Quaternion.AngleAxis(angularSpeed * dt, rotationAxis) * simRot;
                 }
 
-                Vector3 nextSimPos = simPos + simRot * Vector3.forward * (definition.speed * dt);
+                Vector3 nextSimPos = simPos + simRot * Vector3.forward * (traversalSpeed * dt);
 
                 // If we pass the final target, the rest of the path is safe
                 if (hasPath && path.Length > 0) {

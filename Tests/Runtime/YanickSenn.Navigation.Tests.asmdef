@@ -6,7 +6,9 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "PrimeTween.Runtime",
-        "YanickSenn.Utils"
+        "YanickSenn.Utils",
+        "Unity.Splines",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

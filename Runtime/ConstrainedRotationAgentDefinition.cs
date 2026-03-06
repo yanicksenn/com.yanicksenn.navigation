@@ -5,9 +5,17 @@ namespace YanickSenn.Navigation
     [CreateAssetMenu(fileName = "New Constrained Rotation Agent Definition", menuName = "Navigation/Constrained Rotation Agent Definition")]
     public class ConstrainedRotationAgentDefinition : NavAgentDefinition
     {
-        [Tooltip("The constant forward speed in units per second.")]
+        [Tooltip("The constant forward speed in units per second (when not slowing down).")]
         [Min(0)]
         public float speed = 3f;
+
+        [Tooltip("The lowest speed the agent can reduce to when rotating sharply.")]
+        [Min(0)]
+        public float minSpeed = 1f;
+
+        [Tooltip("The angle threshold (in degrees) above which the agent begins to linearly brake towards minSpeed.")]
+        [Min(0)]
+        public float slowDownAngleThreshold = 45f;
 
         [Tooltip("The maximum rotation speed in degrees per second.")]
         [Min(0)]
