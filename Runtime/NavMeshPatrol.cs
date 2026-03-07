@@ -32,6 +32,7 @@ namespace YanickSenn.Navigation
         private void Update()
         {
             if (patrolPoints == null || patrolPoints.Length == 0) return;
+            if (agent.IsStopped) return;
 
             if (isWaiting)
             {

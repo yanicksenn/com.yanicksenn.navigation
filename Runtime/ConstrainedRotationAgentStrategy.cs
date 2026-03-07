@@ -1,89 +1,103 @@
+using System;
 using UnityEngine;
 
 namespace YanickSenn.Navigation {
     public class ConstrainedRotationAgentStrategy : NavAgentStrategy {
-        private readonly ConstrainedRotationAgentDefinition definition;
-        private Vector3[] path;
-        private Bounds[] corridor;
-        private int currentPathIndex;
-        private bool hasPath;
-        private Vector3 startPosition;
+        private readonly ConstrainedRotationAgentDefinition _definition;
+        private readonly Vector3[] _projectedArc;
+
+        private Vector3[] _path;
+        private Bounds[] _corridor;
+        private int _currentPathIndex;
+        private bool _hasPath;
+        private Vector3 _startPosition;
 
         // Debugging
-        private Vector3 currentSteeringTarget;
-        private Vector3[] projectedArc;
+        private Vector3 _currentSteeringTarget;
 
         public ConstrainedRotationAgentStrategy(NavMeshAgent agent, ConstrainedRotationAgentDefinition definition) :
             base(agent) {
-            this.definition = definition;
-            this.hasPath = false;
-            this.path = new Vector3[0];
-            this.corridor = new Bounds[0];
-            this.projectedArc = new Vector3[definition.projectionSteps + 1];
+            _definition = definition;
+            _hasPath = false;
+            _path = Array.Empty<Vector3>();
+            _corridor = Array.Empty<Bounds>();
+            _projectedArc = new Vector3[definition.projectionSteps + 1];
         }
 
         public override void SetDestination(Vector3 target) {
-            startPosition = agent.transform.position;
-            if (NavMeshPathfinder.TryFindPath(agent.navMeshData, startPosition, target, out path, out corridor)) {
-                currentPathIndex = 0;
-                hasPath = true;
+            _startPosition = agent.transform.position;
+            if (NavMeshPathfinder.TryFindPath(agent.navMeshData, _startPosition, target, out _path, out _corridor)) {
+                _currentPathIndex = 0;
+                _hasPath = true;
             } else {
-                path = new Vector3[0];
-                corridor = new Bounds[0];
-                hasPath = false;
+                _path = Array.Empty<Vector3>();
+                _corridor = Array.Empty<Bounds>();
+                _hasPath = false;
             }
         }
 
         public override void Stop() {
-            hasPath = false;
-            path = new Vector3[0];
-            corridor = new Bounds[0];
+            _hasPath = false;
+            _path = Array.Empty<Vector3>();
+            _corridor = Array.Empty<Bounds>();
         }
 
         public override void Update(float deltaTime) {
             if (Mathf.Abs(Vector3.Dot(agent.transform.forward, Vector3.up)) < 0.99f) {
                 Quaternion targetUpRotation = Quaternion.LookRotation(agent.transform.forward, Vector3.up);
-                agent.transform.rotation = Quaternion.Slerp(agent.transform.rotation, targetUpRotation, definition.upAlignmentSpeed * deltaTime);
+                agent.transform.rotation = Quaternion.Slerp(agent.transform.rotation, targetUpRotation, agent.upAlignmentSpeed * deltaTime);
             }
 
-            if (!hasPath || path == null || currentPathIndex >= path.Length) {
-                hasPath = false;
+            if (!_hasPath || _path == null || _currentPathIndex >= _path.Length) {
+                _hasPath = false;
                 return;
             }
 
             Vector3 currentPos = agent.transform.position;
             Vector3 forward = agent.transform.forward;
 
-            Vector3 targetPosition = path[currentPathIndex];
-            Vector3 previousPosition = currentPathIndex > 0 ? path[currentPathIndex - 1] : startPosition;
+            Vector3 targetPosition = _path[_currentPathIndex];
+            Vector3 previousPosition = _currentPathIndex > 0 ? _path[_currentPathIndex - 1] : _startPosition;
 
-            bool isFinalWaypoint = (currentPathIndex == path.Length - 1);
+            bool isFinalWaypoint = (_currentPathIndex == _path.Length - 1);
             float distToTarget = Vector3.Distance(currentPos, targetPosition);
+
+            Vector3 tempDesiredDirection = (targetPosition - currentPos).normalized;
+            if (tempDesiredDirection == Vector3.zero) tempDesiredDirection = forward;
+            float tempAlpha = Vector3.Angle(forward, tempDesiredDirection);
+
+            float tempSpeed = agent.speed;
+            if (tempAlpha > _definition.slowDownAngleThreshold) {
+                float excessAngle = tempAlpha - _definition.slowDownAngleThreshold;
+                float maxExcess = 180f - _definition.slowDownAngleThreshold;
+                float tSpeed = Mathf.Clamp01(excessAngle / maxExcess);
+                tempSpeed = Mathf.Lerp(agent.speed, _definition.minSpeed, tSpeed);
+            }
 
             if (isFinalWaypoint) {
                 // If we can reach the target in this frame, or we pass its plane, snap to it exactly and stop
-                Vector3 stepVector = forward * (definition.speed * deltaTime);
+                Vector3 stepVector = forward * (tempSpeed * deltaTime);
                 Vector3 nextPos = currentPos + stepVector;
 
-                Vector3 finalSegmentDir = path.Length > 1
-                    ? (path[path.Length - 1] - path[path.Length - 2]).normalized
-                    : (path[0] - startPosition).normalized;
+                Vector3 finalSegmentDir = _path.Length > 1
+                    ? (_path[^1] - _path[^2]).normalized
+                    : (_path[0] - _startPosition).normalized;
                 if (finalSegmentDir == Vector3.zero) finalSegmentDir = forward;
 
-                // Passed target if it was in front of us, and is now behind us relative to the final path direction.
-                bool passedTarget = Vector3.Dot(targetPosition - currentPos, finalSegmentDir) >= 0f &&
+                // Passed target if we cross its plane this frame, or if we are already past its plane.
+                bool passedTarget = Vector3.Dot(targetPosition - currentPos, finalSegmentDir) <= 0f ||
                                     Vector3.Dot(targetPosition - nextPos, finalSegmentDir) <= 0f;
 
-                if (passedTarget || distToTarget <= definition.speed * deltaTime) {
+                if (passedTarget || distToTarget <= tempSpeed * deltaTime) {
                     Vector3 moveDir = targetPosition - currentPos;
                     if (moveDir.sqrMagnitude > 0.0001f) {
                         Quaternion targetRotation = Quaternion.LookRotation(moveDir.normalized, agent.transform.up);
                         agent.transform.rotation = Quaternion.Slerp(agent.transform.rotation, targetRotation,
-                            definition.forwardAlignmentSpeed * deltaTime);
+                            agent.forwardAlignmentSpeed * deltaTime);
                     }
 
                     agent.transform.position = targetPosition;
-                    hasPath = false;
+                    _hasPath = false;
                     return;
                 }
             } else {
@@ -94,27 +108,14 @@ namespace YanickSenn.Navigation {
                 float t = sqrLen == 0 ? 1f : Vector3.Dot(ap, ab) / sqrLen;
 
                 if (t >= 0.95f || distToTarget < 0.5f) {
-                    currentPathIndex++;
-                    targetPosition = path[currentPathIndex];
-                    previousPosition = currentPathIndex > 0 ? path[currentPathIndex - 1] : startPosition;
+                    _currentPathIndex++;
+                    targetPosition = _path[_currentPathIndex];
+                    previousPosition = _currentPathIndex > 0 ? _path[_currentPathIndex - 1] : _startPosition;
                 }
             }
 
             // 2. Determine Lookahead Target (Carrot on a stick)
-            // First we need to estimate the speed to get a good lookahead distance, then we refine the speed.
-            // A simple approximation: if the next waypoint is very sharp, assume we need a shorter lookahead.
-            Vector3 tempDesiredDirection = (path[currentPathIndex] - currentPos).normalized;
-            if (tempDesiredDirection == Vector3.zero) tempDesiredDirection = forward;
-            float tempAlpha = Vector3.Angle(forward, tempDesiredDirection);
-            
-            float tempSpeed = definition.speed;
-            if (tempAlpha > definition.slowDownAngleThreshold) {
-                float excessAngle = tempAlpha - definition.slowDownAngleThreshold;
-                float maxExcess = 180f - definition.slowDownAngleThreshold;
-                float tSpeed = Mathf.Clamp01(excessAngle / maxExcess);
-                tempSpeed = Mathf.Lerp(definition.speed, definition.minSpeed, tSpeed);
-            }
-            
+            // We already calculated tempSpeed above to estimate a good lookahead distance.
             Vector3 lookaheadTarget = GetLookaheadTarget(currentPos, tempSpeed);
 
             // 3. Determine initial steering intent
@@ -126,15 +127,15 @@ namespace YanickSenn.Navigation {
             Quaternion currentRotation = agent.transform.rotation;
 
             float alpha = Vector3.Angle(forward, desiredDirection);
-            
+
             // Calculate dynamic speed based on turn severity
-            float currentSpeed = definition.speed;
-            if (alpha > definition.slowDownAngleThreshold) {
+            float currentSpeed = agent.speed;
+            if (alpha > _definition.slowDownAngleThreshold) {
                 // Determine how far into the slowdown zone we are
-                float excessAngle = alpha - definition.slowDownAngleThreshold;
-                float maxExcess = 180f - definition.slowDownAngleThreshold;
+                float excessAngle = alpha - _definition.slowDownAngleThreshold;
+                float maxExcess = 180f - _definition.slowDownAngleThreshold;
                 float tSpeed = Mathf.Clamp01(excessAngle / maxExcess);
-                currentSpeed = Mathf.Lerp(definition.speed, definition.minSpeed, tSpeed);
+                currentSpeed = Mathf.Lerp(agent.speed, _definition.minSpeed, tSpeed);
             }
 
             float angularSpeed = 0f;
@@ -142,7 +143,7 @@ namespace YanickSenn.Navigation {
 
             if (alpha > 179.9f) {
                 // Pure pursuit singularity: Target is exactly behind us. Force a hard turn.
-                angularSpeed = definition.maxRotationSpeed;
+                angularSpeed = _definition.maxRotationSpeed;
                 rotationAxis = agent.transform.up;
             } else if (alpha > 0.001f && distToLookahead > 0.001f) {
                 // Pure pursuit calculates a circular arc.
@@ -151,7 +152,7 @@ namespace YanickSenn.Navigation {
                 float omegaRad = (2f * currentSpeed * Mathf.Sin(alpha * Mathf.Deg2Rad)) / distToLookahead;
                 float omegaDeg = omegaRad * Mathf.Rad2Deg;
 
-                angularSpeed = Mathf.Min(omegaDeg, definition.maxRotationSpeed);
+                angularSpeed = Mathf.Min(omegaDeg, _definition.maxRotationSpeed);
 
                 rotationAxis = Vector3.Cross(forward, desiredDirection).normalized;
                 if (rotationAxis == Vector3.zero) rotationAxis = agent.transform.right;
@@ -165,7 +166,7 @@ namespace YanickSenn.Navigation {
             // 4. Project movement to check corridor bounds
             int safeStepsForDesired = GetSafeSteps(currentPos, currentRotation, rotationAxis, angularSpeed, currentSpeed);
 
-            if (angularSpeed > 0.1f && safeStepsForDesired < definition.projectionSteps) {
+            if (angularSpeed > 0.1f && safeStepsForDesired < _definition.projectionSteps) {
                 // Arc is not completely safe.
                 // Perform a 3D cone sweep to find the safest rotation closest to our desired pure pursuit rotation.
                 int bestSafeSteps = safeStepsForDesired;
@@ -185,7 +186,7 @@ namespace YanickSenn.Navigation {
 
                 for (int r = 1; r <= numRadii; r++) {
                     float speedFraction = (float)r / numRadii;
-                    float testAngularSpeed = definition.maxRotationSpeed * speedFraction;
+                    float testAngularSpeed = _definition.maxRotationSpeed * speedFraction;
 
                     for (int i = 0; i < numConeAngles; i++) {
                         float angle = (i * 360f) / numConeAngles;
@@ -236,7 +237,7 @@ namespace YanickSenn.Navigation {
                 GetSafeSteps(currentPos, currentRotation, Vector3.up, 0f, currentSpeed);
             }
 
-            currentSteeringTarget = lookaheadTarget;
+            _currentSteeringTarget = lookaheadTarget;
 
             // Apply rotation
             agent.transform.rotation = targetRot;
@@ -248,13 +249,13 @@ namespace YanickSenn.Navigation {
         private Vector3 GetLookaheadTarget(Vector3 currentPos, float speed) {
             // Minimum turning radius prevents the agent from orbiting a point it cannot physically turn tightly enough to reach.
             // When going slower, the min radius gets smaller allowing tighter turns.
-            float minRadius = speed / (definition.maxRotationSpeed * Mathf.Deg2Rad);
+            float minRadius = speed / (_definition.maxRotationSpeed * Mathf.Deg2Rad);
             // Ensure lookahead is always safely larger than the turning radius, scaled by speed ratio
-            float speedRatio = speed / definition.speed;
-            float L = Mathf.Max(definition.lookaheadDistance * speedRatio, minRadius * 1.2f);
+            float speedRatio = speed / agent.speed;
+            float L = Mathf.Max(_definition.lookaheadDistance * speedRatio, minRadius * 1.2f);
 
-            Vector3 previousPosition = currentPathIndex > 0 ? path[currentPathIndex - 1] : startPosition;
-            Vector3 targetPosition = path[currentPathIndex];
+            Vector3 previousPosition = _currentPathIndex > 0 ? _path[_currentPathIndex - 1] : _startPosition;
+            Vector3 targetPosition = _path[_currentPathIndex];
 
             // Find closest point on current segment
             Vector3 closestPoint = GetClosestPointOnSegment(previousPosition, targetPosition, currentPos);
@@ -263,30 +264,20 @@ namespace YanickSenn.Navigation {
             Vector3 lastPoint = closestPoint;
 
             // Advance along the path starting from the closest point
-            for (int i = currentPathIndex; i < path.Length; i++) {
-                float distToSegmentEnd = Vector3.Distance(lastPoint, path[i]);
+            for (int i = _currentPathIndex; i < _path.Length; i++) {
+                float distToSegmentEnd = Vector3.Distance(lastPoint, _path[i]);
                 if (distanceAccumulator + distToSegmentEnd >= L) {
                     float excess = L - distanceAccumulator;
-                    Vector3 dir = (path[i] - lastPoint).normalized;
+                    Vector3 dir = (_path[i] - lastPoint).normalized;
                     return lastPoint + dir * excess;
                 }
 
                 distanceAccumulator += distToSegmentEnd;
-                lastPoint = path[i];
+                lastPoint = _path[i];
             }
 
-            // Extrapolate past the final waypoint
-            Vector3 finalSegmentDir;
-            if (path.Length > 1) {
-                finalSegmentDir = (path[path.Length - 1] - path[path.Length - 2]).normalized;
-            } else {
-                finalSegmentDir = (path[0] - startPosition).normalized;
-            }
-
-            if (finalSegmentDir == Vector3.zero) finalSegmentDir = agent.transform.forward;
-
-            float remainingExcess = L - distanceAccumulator;
-            return path[path.Length - 1] + finalSegmentDir * remainingExcess;
+            // Reached the end of the path, just return the final waypoint
+            return _path[^1];
         }
 
         private Vector3 GetClosestPointOnSegment(Vector3 a, Vector3 b, Vector3 p) {
@@ -299,12 +290,12 @@ namespace YanickSenn.Navigation {
         }
 
         private int GetSafeSteps(Vector3 startPos, Quaternion startRot, Vector3 rotationAxis, float angularSpeed, float traversalSpeed) {
-            projectedArc[0] = startPos;
+            _projectedArc[0] = startPos;
             Vector3 simPos = startPos;
             Quaternion simRot = startRot;
 
-            for (int i = 1; i <= definition.projectionSteps; i++) {
-                float dt = definition.projectionStepTime;
+            for (int i = 1; i <= _definition.projectionSteps; i++) {
+                float dt = _definition.projectionStepTime;
 
                 if (angularSpeed > 0.001f) {
                     simRot = Quaternion.AngleAxis(angularSpeed * dt, rotationAxis) * simRot;
@@ -313,35 +304,35 @@ namespace YanickSenn.Navigation {
                 Vector3 nextSimPos = simPos + simRot * Vector3.forward * (traversalSpeed * dt);
 
                 // If we pass the final target, the rest of the path is safe
-                if (hasPath && path.Length > 0) {
-                    Vector3 finalTarget = path[path.Length - 1];
-                    Vector3 finalSegmentDir = path.Length > 1
-                        ? (path[path.Length - 1] - path[path.Length - 2]).normalized
-                        : (path[0] - startPosition).normalized;
+                if (_hasPath && _path.Length > 0) {
+                    Vector3 finalTarget = _path[_path.Length - 1];
+                    Vector3 finalSegmentDir = _path.Length > 1
+                        ? (_path[_path.Length - 1] - _path[_path.Length - 2]).normalized
+                        : (_path[0] - _startPosition).normalized;
                     if (finalSegmentDir == Vector3.zero) finalSegmentDir = startRot * Vector3.forward;
 
                     if (Vector3.Dot(finalTarget - simPos, finalSegmentDir) >= 0f &&
                         Vector3.Dot(finalTarget - nextSimPos, finalSegmentDir) <= 0f) {
-                        for (int j = i; j <= definition.projectionSteps; j++) projectedArc[j] = nextSimPos;
-                        return definition.projectionSteps;
+                        for (int j = i; j <= _definition.projectionSteps; j++) _projectedArc[j] = nextSimPos;
+                        return _definition.projectionSteps;
                     }
                 }
 
                 simPos = nextSimPos;
-                projectedArc[i] = simPos;
+                _projectedArc[i] = simPos;
 
                 if (!IsPointInCorridor(simPos)) {
                     return i - 1;
                 }
             }
 
-            return definition.projectionSteps;
+            return _definition.projectionSteps;
         }
 
         private bool IsPointInCorridor(Vector3 point) {
             // Allow a small tolerance margin so boundary floats don't fail immediately
-            for (int i = 0; i < corridor.Length; i++) {
-                Bounds b = corridor[i];
+            for (int i = 0; i < _corridor.Length; i++) {
+                Bounds b = _corridor[i];
                 b.Expand(0.01f);
                 if (b.Contains(point)) {
                     return true;
@@ -351,21 +342,21 @@ namespace YanickSenn.Navigation {
             return false;
         }
 
-        public override bool HasPath => hasPath;
+        public override bool HasPath => _hasPath;
 
-        public override Vector3[] CurrentPath => hasPath ? path : new Vector3[0];
+        public override Vector3[] CurrentPath => _hasPath ? _path : new Vector3[0];
 
-        public override Bounds[] CurrentPathCubes => hasPath ? corridor : new Bounds[0];
+        public override Bounds[] CurrentPathCubes => _hasPath ? _corridor : new Bounds[0];
 
         public override void DrawGizmos() {
-            if (path == null || path.Length == 0) return;
+            if (_path == null || _path.Length == 0) return;
 
             // Draw completed path in grey
             Gizmos.color = Color.grey;
-            Vector3 lastPoint = startPosition;
-            for (int i = 0; i < currentPathIndex; i++) {
-                Gizmos.DrawLine(lastPoint, path[i]);
-                lastPoint = path[i];
+            Vector3 lastPoint = _startPosition;
+            for (int i = 0; i < _currentPathIndex; i++) {
+                Gizmos.DrawLine(lastPoint, _path[i]);
+                lastPoint = _path[i];
             }
 
             Gizmos.DrawLine(lastPoint, agent.transform.position);
@@ -373,24 +364,24 @@ namespace YanickSenn.Navigation {
             // Draw remaining path in yellow
             Gizmos.color = Color.yellow;
             lastPoint = agent.transform.position;
-            for (int i = currentPathIndex; i < path.Length; i++) {
-                Gizmos.DrawLine(lastPoint, path[i]);
-                lastPoint = path[i];
+            for (int i = _currentPathIndex; i < _path.Length; i++) {
+                Gizmos.DrawLine(lastPoint, _path[i]);
+                lastPoint = _path[i];
             }
 
             // Draw lookahead target
-            if (hasPath) {
+            if (_hasPath) {
                 Gizmos.color = Color.magenta;
-                Gizmos.DrawSphere(currentSteeringTarget, 0.2f);
-                Gizmos.DrawLine(agent.transform.position, currentSteeringTarget);
+                Gizmos.DrawSphere(_currentSteeringTarget, 0.2f);
+                Gizmos.DrawLine(agent.transform.position, _currentSteeringTarget);
             }
 
             // Draw projected arc
-            if (hasPath && projectedArc != null && projectedArc.Length > 1) {
+            if (_hasPath && _projectedArc != null && _projectedArc.Length > 1) {
                 Gizmos.color = Color.cyan;
-                for (int i = 0; i < projectedArc.Length - 1; i++) {
-                    if (projectedArc[i] != Vector3.zero && projectedArc[i + 1] != Vector3.zero) {
-                        Gizmos.DrawLine(projectedArc[i], projectedArc[i + 1]);
+                for (int i = 0; i < _projectedArc.Length - 1; i++) {
+                    if (_projectedArc[i] != Vector3.zero && _projectedArc[i + 1] != Vector3.zero) {
+                        Gizmos.DrawLine(_projectedArc[i], _projectedArc[i + 1]);
                     }
                 }
             }

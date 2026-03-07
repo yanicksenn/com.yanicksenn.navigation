@@ -1,13 +1,10 @@
 using UnityEngine;
 
-namespace YanickSenn.Navigation
-{
-    public abstract class NavAgentStrategy
-    {
+namespace YanickSenn.Navigation {
+    public abstract class NavAgentStrategy {
         protected NavMeshAgent agent;
 
-        public NavAgentStrategy(NavMeshAgent agent)
-        {
+        public NavAgentStrategy(NavMeshAgent agent) {
             this.agent = agent;
         }
 
@@ -19,6 +16,7 @@ namespace YanickSenn.Navigation
         public abstract Vector3[] CurrentPath { get; }
         public abstract Bounds[] CurrentPathCubes { get; }
 
-        public virtual void DrawGizmos() { }
+        public virtual void DrawGizmos() {
+        }
     }
 }

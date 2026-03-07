@@ -21,7 +21,7 @@ namespace YanickSenn.Navigation.Runtime.Tests
             agent = agentObj.AddComponent<NavMeshAgent>();
 
             navMeshData = ScriptableObject.CreateInstance<NavMeshData>();
-            
+
             navMeshData.WalkableCubes = new[]
             {
                 new Bounds(new Vector3(0, 0, 0), Vector3.one),
@@ -31,7 +31,7 @@ namespace YanickSenn.Navigation.Runtime.Tests
             };
 
             agent.navMeshData = navMeshData;
-            
+
             animMoveForward = ScriptableObject.CreateInstance<AnchorSequenceAnimationDefinition>();
             animMoveForward.name = "Forward";
             animMoveForward.anchors = new[] { new TweenAnimationAnchor { localPosition = new Vector3(0, 0, 1), localForward = new Vector3(0, 0, 1), duration = 1f } };
@@ -39,7 +39,7 @@ namespace YanickSenn.Navigation.Runtime.Tests
             animTurnLeft = ScriptableObject.CreateInstance<AnchorSequenceAnimationDefinition>();
             animTurnLeft.name = "Left";
             animTurnLeft.anchors = new[] { new TweenAnimationAnchor { localPosition = Vector3.zero, localForward = new Vector3(-1, 0, 0), duration = 0.5f } };
-            
+
             animTurnRight = ScriptableObject.CreateInstance<AnchorSequenceAnimationDefinition>();
             animTurnRight.name = "Right";
             animTurnRight.anchors = new[] { new TweenAnimationAnchor { localPosition = Vector3.zero, localForward = new Vector3(1, 0, 0), duration = 0.5f } };
@@ -50,7 +50,7 @@ namespace YanickSenn.Navigation.Runtime.Tests
             definition.targetReachThreshold = 0.5f;
 
             agent.agentDefinition = definition;
-            
+
             // Invoke private Awake to instantiate strategy after definition is set
             typeof(NavMeshAgent).GetMethod("Awake", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(agent, null);
         }
@@ -78,7 +78,7 @@ namespace YanickSenn.Navigation.Runtime.Tests
 
             Assert.IsTrue(agent.HasPath);
         }
-        
+
         [Test]
         public void TryFindAnimationSequence_CornerTurn_CreatesCorrectSequence()
         {
@@ -91,7 +91,7 @@ namespace YanickSenn.Navigation.Runtime.Tests
 
             Assert.IsTrue(agent.HasPath);
         }
-        
+
         [Test]
         public void TryFindAnimationSequence_UnreachableTarget_ReturnsFalse()
         {

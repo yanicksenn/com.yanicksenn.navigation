@@ -5,60 +5,59 @@ namespace YanickSenn.Navigation
 {
     public class AnimationAgentStrategy : NavAgentStrategy
     {
-        private readonly AnimationAgentDefinition definition;
-        private bool hasPath;
-        private Vector3[] continuousPath;
-        private Bounds[] pathCubes;
-        
-        private List<AgentAnimationDefinition> currentDefinitionSequence;
-        private AgentAnimation currentPlayingAnimation;
-        private int currentAnimationIndex;
+        private readonly AnimationAgentDefinition _definition;
+        private bool _hasPath;
+        private Vector3[] _continuousPath;
+        private Bounds[] _pathCubes;
 
-        public AnimationAgentStrategy(NavMeshAgent agent, AnimationAgentDefinition definition) : base(agent)
-        {
-            this.definition = definition;
-            this.hasPath = false;
+        private List<AgentAnimationDefinition> _currentDefinitionSequence;
+        private AgentAnimation _currentPlayingAnimation;
+        private int _currentAnimationIndex;
+
+        public AnimationAgentStrategy(NavMeshAgent agent, AnimationAgentDefinition definition) : base(agent) {
+            _definition = definition;
+            _hasPath = false;
         }
 
-        public override bool HasPath => hasPath;
+        public override bool HasPath => _hasPath;
 
-        public override Vector3[] CurrentPath => hasPath ? continuousPath : new Vector3[0];
+        public override Vector3[] CurrentPath => _hasPath ? _continuousPath : new Vector3[0];
 
-        public override Bounds[] CurrentPathCubes => hasPath ? pathCubes : new Bounds[0];
+        public override Bounds[] CurrentPathCubes => _hasPath ? _pathCubes : new Bounds[0];
 
         public override void SetDestination(Vector3 target)
         {
             Stop();
 
             // 1. Get the continuous path cubes to bound our search
-            if (!NavMeshPathfinder.TryFindPath(agent.navMeshData, agent.transform.position, target, out continuousPath, out pathCubes))
+            if (!NavMeshPathfinder.TryFindPath(agent.navMeshData, agent.transform.position, target, out _continuousPath, out _pathCubes))
             {
                 return;
             }
 
             // 2. Perform discrete A* search using available animations
-            if (TryFindAnimationSequence(agent.transform.position, agent.transform.rotation, target, out currentDefinitionSequence))
+            if (TryFindAnimationSequence(agent.transform.position, agent.transform.rotation, target, out _currentDefinitionSequence))
             {
-                hasPath = true;
-                currentAnimationIndex = 0;
+                _hasPath = true;
+                _currentAnimationIndex = 0;
                 PlayNextAnimation();
             }
         }
 
         public override void Stop()
         {
-            hasPath = false;
-            
-            if (currentPlayingAnimation != null && currentPlayingAnimation.IsPlaying)
+            _hasPath = false;
+
+            if (_currentPlayingAnimation != null && _currentPlayingAnimation.IsPlaying)
             {
-                currentPlayingAnimation.Stop();
-                currentPlayingAnimation.OnComplete -= PlayNextAnimation;
+                _currentPlayingAnimation.Stop();
+                _currentPlayingAnimation.OnComplete -= PlayNextAnimation;
             }
-            currentPlayingAnimation = null;
-            
-            currentDefinitionSequence?.Clear();
-            continuousPath = new Vector3[0];
-            pathCubes = new Bounds[0];
+            _currentPlayingAnimation = null;
+
+            _currentDefinitionSequence?.Clear();
+            _continuousPath = new Vector3[0];
+            _pathCubes = new Bounds[0];
         }
 
         public override void Update(float deltaTime)
@@ -69,8 +68,8 @@ namespace YanickSenn.Navigation
         private bool TryFindAnimationSequence(Vector3 startPos, Quaternion startRot, Vector3 target, out List<AgentAnimationDefinition> sequence)
         {
             sequence = new List<AgentAnimationDefinition>();
-            
-            if (definition.availableAnimations == null || definition.availableAnimations.Length == 0) return false;
+
+            if (_definition.availableAnimations == null || _definition.availableAnimations.Length == 0) return false;
 
             var startState = new DiscreteState(startPos, startRot);
 
@@ -96,7 +95,7 @@ namespace YanickSenn.Navigation
             while (openSet.Count > 0 && iterations < maxIterations)
             {
                 iterations++;
-                
+
                 int currentIndex = 0;
                 for (int i = 1; i < openSet.Count; i++)
                 {
@@ -110,7 +109,7 @@ namespace YanickSenn.Navigation
                 openSet.RemoveAt(currentIndex);
 
                 // Goal check
-                if (Vector3.Distance(current.position, target) <= definition.targetReachThreshold)
+                if (Vector3.Distance(current.position, target) <= _definition.targetReachThreshold)
                 {
                     ReconstructSequence(current, sequence);
                     return true;
@@ -119,7 +118,7 @@ namespace YanickSenn.Navigation
                 closedSet.Add(current.state);
 
                 // Expand neighbors relying on abstract definition methods
-                foreach (var animDef in definition.availableAnimations)
+                foreach (var animDef in _definition.availableAnimations)
                 {
                     Vector3 nextPos = animDef.GetEndPosition(current.position, current.rotation);
                     Quaternion nextRot = animDef.GetEndRotation(current.rotation);
@@ -128,7 +127,7 @@ namespace YanickSenn.Navigation
                     if (closedSet.Contains(nextState)) continue;
 
                     // Validate via abstraction
-                    if (!animDef.CheckValidity(agent, current.position, current.rotation, pathCubes)) continue;
+                    if (!animDef.CheckValidity(agent, current.position, current.rotation, _pathCubes)) continue;
 
                     float tentativeGScore = current.gScore + Vector3.Distance(current.position, nextPos);
 
@@ -172,20 +171,20 @@ namespace YanickSenn.Navigation
 
         private void PlayNextAnimation()
         {
-            if (!hasPath || currentDefinitionSequence == null || currentAnimationIndex >= currentDefinitionSequence.Count)
+            if (!_hasPath || _currentDefinitionSequence == null || _currentAnimationIndex >= _currentDefinitionSequence.Count)
             {
                 Stop();
                 return;
             }
 
-            var nextDef = currentDefinitionSequence[currentAnimationIndex];
-            
+            var nextDef = _currentDefinitionSequence[_currentAnimationIndex];
+
             // Factory Pattern
-            currentPlayingAnimation = nextDef.CreateAnimation(agent.transform.position, agent.transform.rotation);
-            currentPlayingAnimation.OnComplete += PlayNextAnimation;
-            
-            currentAnimationIndex++;
-            currentPlayingAnimation.Play(agent);
+            _currentPlayingAnimation = nextDef.CreateAnimation(agent.transform.position, agent.transform.rotation);
+            _currentPlayingAnimation.OnComplete += PlayNextAnimation;
+
+            _currentAnimationIndex++;
+            _currentPlayingAnimation.Play(agent);
         }
 
         private class SearchNode
@@ -225,7 +224,7 @@ namespace YanickSenn.Navigation
             }
 
             public override bool Equals(object obj) => obj is DiscreteState other && Equals(other);
-            
+
             public override int GetHashCode()
             {
                 unchecked

@@ -27,23 +27,17 @@ namespace YanickSenn.Navigation
             IsPlaying = true;
             
             sequence = Sequence.Create();
-            
-            Vector3 worldPos = startPos;
-            Quaternion worldRot = startRot;
 
             foreach (var anchor in anchors)
             {
-                Vector3 targetPos = worldPos + worldRot * anchor.localPosition;
-                Quaternion targetRot = worldRot * Quaternion.LookRotation(anchor.localForward.normalized, Vector3.up);
+                Vector3 targetPos = startPos + startRot * anchor.localPosition;
+                Quaternion targetRot = startRot * Quaternion.LookRotation(anchor.localForward.normalized, Vector3.up);
 
                 var tweenPos = Tween.Position(agent.transform, targetPos, anchor.duration, Ease.Linear);
                 var tweenRot = Tween.Rotation(agent.transform, targetRot, anchor.duration, Ease.Linear);
 
                 sequence.Chain(tweenPos);
                 sequence.Group(tweenRot);
-                
-                worldPos = targetPos;
-                worldRot = targetRot;
             }
 
             sequence.OnComplete(() =>

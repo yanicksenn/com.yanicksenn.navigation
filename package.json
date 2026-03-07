@@ -1,6 +1,6 @@
 {
   "name": "com.yanicksenn.navigation",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "displayName": "Navigation",
   "description": "This package contains a custom 3d navigation agent.",
   "unity": "6000.3",

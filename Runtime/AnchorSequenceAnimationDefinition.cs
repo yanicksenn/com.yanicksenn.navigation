@@ -46,13 +46,9 @@ namespace YanickSenn.Navigation
         {
             if (anchors == null || anchors.Length == 0) return true;
 
-            Vector3 worldPos = startPos;
-            Quaternion worldRot = startRot;
-
             foreach (var anchor in anchors)
             {
-                worldPos += worldRot * anchor.localPosition;
-                worldRot = worldRot * Quaternion.LookRotation(anchor.localForward.normalized, Vector3.up);
+                Vector3 worldPos = startPos + startRot * anchor.localPosition;
 
                 bool pointValid = false;
                 foreach (var bounds in pathCubes)

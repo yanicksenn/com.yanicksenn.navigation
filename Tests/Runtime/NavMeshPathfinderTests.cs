@@ -36,10 +36,9 @@ namespace YanickSenn.Navigation.Tests
             bool found = NavMeshPathfinder.TryFindPath(data, new Vector3(-1, 0, 0), new Vector3(1, 0, 0), out var path, out var pathCubes);
 
             Assert.IsTrue(found);
-            // Expected: Portal at x=0, then Target at x=1
-            Assert.AreEqual(2, path.Length);
-            Assert.AreEqual(0f, path[0].x);
-            Assert.AreEqual(1f, path[1].x);
+            // Expected: Smoothed path directly to Target at x=1
+            Assert.AreEqual(1, path.Length);
+            Assert.AreEqual(1f, path[0].x);
         }
 
         [Test]
@@ -62,10 +61,11 @@ namespace YanickSenn.Navigation.Tests
             Assert.IsTrue(found);
             // Should go through C2 -> C1 -> C3
             // Portals: C2|C1 at (1,0,0), C1|C3 at (0,1,0), then Target (0,2,0)
-            Assert.AreEqual(3, path.Length);
-            Assert.AreEqual(new Vector3(1, 0, 0), path[0]);
-            Assert.AreEqual(new Vector3(0, 1, 0), path[1]);
-            Assert.AreEqual(new Vector3(0, 2, 0), path[2]);
+            // With String Pulling, line from Start(2,0,0) to C1|C3 portal(0,1,0) is clear, 
+            // so the C2|C1 portal(1,0,0) is optimized out.
+            Assert.AreEqual(2, path.Length);
+            Assert.AreEqual(new Vector3(0, 1, 0), path[0]);
+            Assert.AreEqual(new Vector3(0, 2, 0), path[1]);
         }
 
         [Test]
@@ -79,6 +79,55 @@ namespace YanickSenn.Navigation.Tests
 
             Assert.IsFalse(found);
             Assert.IsNull(path);
+        }
+
+        [Test]
+        public void SamplePosition_InsideCube_ReturnsSamePosition()
+        {
+            var c1 = new Bounds(new Vector3(0, 0, 0), new Vector3(2, 2, 2));
+            var data = CreateNavMeshData(c1);
+
+            bool found = NavMeshPathfinder.SamplePosition(data, new Vector3(0.5f, 0.5f, 0.5f), out var hitPosition, 10f);
+
+            Assert.IsTrue(found);
+            Assert.AreEqual(new Vector3(0.5f, 0.5f, 0.5f), hitPosition);
+        }
+
+        [Test]
+        public void SamplePosition_OutsideCubeWithinMaxDistance_ReturnsClosestPoint()
+        {
+            var c1 = new Bounds(new Vector3(0, 0, 0), new Vector3(2, 2, 2));
+            var data = CreateNavMeshData(c1);
+
+            bool found = NavMeshPathfinder.SamplePosition(data, new Vector3(2f, 0f, 0f), out var hitPosition, 2f);
+
+            Assert.IsTrue(found);
+            Assert.AreEqual(new Vector3(1f, 0f, 0f), hitPosition);
+        }
+
+        [Test]
+        public void SamplePosition_OutsideCubeBeyondMaxDistance_ReturnsFalse()
+        {
+            var c1 = new Bounds(new Vector3(0, 0, 0), new Vector3(2, 2, 2));
+            var data = CreateNavMeshData(c1);
+
+            bool found = NavMeshPathfinder.SamplePosition(data, new Vector3(5f, 0f, 0f), out var hitPosition, 2f);
+
+            Assert.IsFalse(found);
+            Assert.AreEqual(new Vector3(5f, 0f, 0f), hitPosition);
+        }
+
+        [Test]
+        public void SamplePosition_MultipleCubes_ReturnsClosestPointOverall()
+        {
+            var c1 = new Bounds(new Vector3(0, 0, 0), new Vector3(2, 2, 2));
+            var c2 = new Bounds(new Vector3(5, 0, 0), new Vector3(2, 2, 2));
+            var data = CreateNavMeshData(c1, c2);
+
+            bool found = NavMeshPathfinder.SamplePosition(data, new Vector3(3f, 0f, 0f), out var hitPosition, 10f);
+
+            Assert.IsTrue(found);
+            Assert.AreEqual(new Vector3(4f, 0f, 0f), hitPosition);
         }
     }
 }
