@@ -4,7 +4,8 @@
     "references": [
         "YanickSenn.Navigation",
         "Unity.Splines",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "YanickSenn.Utils"
     ],
     "includePlatforms": [
         "Editor"

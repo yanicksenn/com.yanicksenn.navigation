@@ -1,6 +1,6 @@
 {
   "name": "com.yanicksenn.navigation",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "displayName": "Navigation",
   "description": "This package contains a custom 3d navigation agent.",
   "unity": "6000.3",
@@ -10,5 +10,7 @@
     "email": "info@yanicksenn.com",
     "url": "https://www.yanicksenn.com"
   },
-  "dependencies": null
+  "dependencies": {
+    "com.yanicksenn.utils": "https://github.com/yanicksenn/com.yanicksenn.utils.git#2.0.17"
+  }
 }
