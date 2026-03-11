@@ -57,7 +57,7 @@ namespace YanickSenn.Navigation
             
             if (nextPoint != null)
             {
-                agent.SetDestination(nextPoint.position);
+                agent.SetDestination(new NavTarget(nextPoint.position, nextPoint.rotation));
             }
         }
     }

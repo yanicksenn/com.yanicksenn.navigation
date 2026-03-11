@@ -25,7 +25,7 @@ namespace YanickSenn.Navigation {
             }
         }
 
-        public void SetDestination(Vector3 target) {
+        public void SetDestination(NavTarget target) {
             IsStopped = false;
             _strategy?.SetDestination(target);
         }
@@ -33,6 +33,28 @@ namespace YanickSenn.Navigation {
         public void Stop() {
             IsStopped = true;
             _strategy?.Stop();
+        }
+
+        public async Awaitable<bool> WaitForCompletionAsync(System.Threading.CancellationToken cancellationToken = default) {
+            if (!HasPath) {
+                return !IsStopped;
+            }
+
+            try {
+                while (HasPath) {
+                    if (cancellationToken.IsCancellationRequested) {
+                        Stop();
+                        return false;
+                    }
+                    await Awaitable.NextFrameAsync(cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) {
+                Stop();
+                return false;
+            }
+
+            return !IsStopped;
         }
 
         public bool IsStopped { get; set; }
@@ -47,6 +69,12 @@ namespace YanickSenn.Navigation {
             Gizmos.color = new Color(0f, 1f, 1f, 0.3f); // Cyan semi-transparent for path cubes
             foreach (var cube in CurrentPathCubes) {
                 Gizmos.DrawWireCube(cube.center, cube.size);
+            }
+
+            var path = CurrentPath;
+            if (path != null && path.Length > 0) {
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawWireSphere(path[^1], 0.2f);
             }
         }
     }

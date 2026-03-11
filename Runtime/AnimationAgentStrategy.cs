@@ -25,18 +25,18 @@ namespace YanickSenn.Navigation
 
         public override Bounds[] CurrentPathCubes => _hasPath ? _pathCubes : new Bounds[0];
 
-        public override void SetDestination(Vector3 target)
+        public override void SetDestination(NavTarget target)
         {
             Stop();
 
             // 1. Get the continuous path cubes to bound our search
-            if (!NavMeshPathfinder.TryFindPath(agent.navMeshData, agent.transform.position, target, out _continuousPath, out _pathCubes))
+            if (!NavMeshPathfinder.TryFindPath(Agent.navMeshData, Agent.transform.position, target, out _continuousPath, out _pathCubes))
             {
                 return;
             }
 
             // 2. Perform discrete A* search using available animations
-            if (TryFindAnimationSequence(agent.transform.position, agent.transform.rotation, target, out _currentDefinitionSequence))
+            if (TryFindAnimationSequence(Agent.transform.position, Agent.transform.rotation, target, out _currentDefinitionSequence))
             {
                 _hasPath = true;
                 _currentAnimationIndex = 0;
@@ -127,7 +127,7 @@ namespace YanickSenn.Navigation
                     if (closedSet.Contains(nextState)) continue;
 
                     // Validate via abstraction
-                    if (!animDef.CheckValidity(agent, current.position, current.rotation, _pathCubes)) continue;
+                    if (!animDef.CheckValidity(Agent, current.position, current.rotation, _pathCubes)) continue;
 
                     float tentativeGScore = current.gScore + Vector3.Distance(current.position, nextPos);
 
@@ -180,11 +180,11 @@ namespace YanickSenn.Navigation
             var nextDef = _currentDefinitionSequence[_currentAnimationIndex];
 
             // Factory Pattern
-            _currentPlayingAnimation = nextDef.CreateAnimation(agent.transform.position, agent.transform.rotation);
+            _currentPlayingAnimation = nextDef.CreateAnimation(Agent.transform.position, Agent.transform.rotation);
             _currentPlayingAnimation.OnComplete += PlayNextAnimation;
 
             _currentAnimationIndex++;
-            _currentPlayingAnimation.Play(agent);
+            _currentPlayingAnimation.Play(Agent);
         }
 
         private class SearchNode
